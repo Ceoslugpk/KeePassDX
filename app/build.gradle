@@ -59,15 +59,12 @@ android {
                             "\"KeepassDXStyle_Dynamic_Light\"," +
                             "\"KeepassDXStyle_Dynamic_Night\"}"
             buildConfigField "String[]", "ICON_PACKS_DISABLED", "{}"
-        buildConfigField "String", "GOOGLE_SERVER_CLIENT_ID", "\"unused\""
-        manifestPlaceholders = [ googleDriveApiKey:"unused" ]
         }
         free {
             dimension "version"
             applicationIdSuffix = ".free"
             buildConfigField "String", "BUILD_VERSION", "\"free\""
             buildConfigField "boolean", "CLOSED_STORE", "true"
-        buildConfigField "String", "GOOGLE_SERVER_CLIENT_ID", "\"YOUR_SERVER_CLIENT_ID\""
             buildConfigField "String[]", "STYLES_DISABLED",
                             "{\"KeepassDXStyle_Blue\"," +
                             "\"KeepassDXStyle_Blue_Night\"," +
@@ -80,7 +77,7 @@ android {
                             "\"KeepassDXStyle_Dynamic_Light\"," +
                             "\"KeepassDXStyle_Dynamic_Night\"}"
             buildConfigField "String[]", "ICON_PACKS_DISABLED", "{}"
-        manifestPlaceholders = [ googleAndroidBackupAPIKey:"AEdPqrEAAAAIbRfbV8fHLItXo8OcHwrO0sSNblqhPwkc0DPTqg", googleDriveApiKey:"YOUR_API_KEY_HERE" ]
+            manifestPlaceholders = [ googleAndroidBackupAPIKey:"AEdPqrEAAAAIbRfbV8fHLItXo8OcHwrO0sSNblqhPwkc0DPTqg" ]
         }
     }
 
@@ -100,9 +97,6 @@ android {
 
     kotlinOptions {
         jvmTarget = "17"
-    }
-    kotlin {
-        jvmToolchain(17)
     }
     buildFeatures {
         buildConfig true
@@ -145,13 +139,6 @@ dependencies {
     implementation 'commons-codec:commons-codec:1.15'
     // Password generator
     implementation 'me.gosimple:nbvcxz:1.5.0'
-
-    // Google Sign-In and Drive
-    implementation 'com.google.apis:google-api-services-drive:v3-rev20240509-2.0.0'
-    implementation 'androidx.credentials:credentials:1.6.0-alpha02'
-    implementation 'androidx.credentials:credentials-play-services-auth:1.6.0-alpha02'
-    implementation 'com.google.android.gms:play-services-auth:20.7.0'
-    implementation 'androidx.work:work-runtime-ktx:2.8.0'
     
     // Modules import
     implementation project(path: ':database')
