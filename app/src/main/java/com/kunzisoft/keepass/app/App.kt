@@ -20,7 +20,13 @@
 package com.kunzisoft.keepass.app
 
 import androidx.multidex.MultiDexApplication
+import androidx.work.Constraints
+import androidx.work.NetworkType
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
 import com.kunzisoft.keepass.activities.stylish.Stylish
+import com.kunzisoft.keepass.services.SyncWorker
+import java.util.concurrent.TimeUnit
 
 class App : MultiDexApplication() {
 
@@ -29,5 +35,22 @@ class App : MultiDexApplication() {
 
         Stylish.load(this)
         PRNGFixes.apply()
+        setupPeriodicSync()
+    }
+
+    private fun setupPeriodicSync() {
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+
+        val syncRequest = PeriodicWorkRequestBuilder<SyncWorker>(1, TimeUnit.HOURS)
+            .setConstraints(constraints)
+            .build()
+
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "drive_sync",
+            androidx.work.ExistingPeriodicWorkPolicy.KEEP,
+            syncRequest
+        )
     }
 }

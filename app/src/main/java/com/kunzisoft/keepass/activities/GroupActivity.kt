@@ -112,6 +112,11 @@ import com.kunzisoft.keepass.view.WindowInsetPosition
 import com.kunzisoft.keepass.view.applyWindowInsets
 import com.kunzisoft.keepass.view.hideByFading
 import com.kunzisoft.keepass.view.setTransparentNavigationBar
+import androidx.work.Data
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import com.kunzisoft.keepass.services.SyncWorker
+import com.kunzisoft.keepass.settings.CloudSyncConstants
 import com.kunzisoft.keepass.view.showActionErrorIfNeeded
 import com.kunzisoft.keepass.view.updateLockPaddingStart
 import com.kunzisoft.keepass.viewmodels.GroupEditViewModel
@@ -457,6 +462,44 @@ class GroupActivity : DatabaseLockActivity(),
             }
         }
 
+        val syncStatusView = findViewById<TextView>(R.id.sync_status)
+        val workManager = WorkManager.getInstance(this)
+        workManager.getWorkInfosForUniqueWorkLiveData("drive_sync").observe(this) { workInfos ->
+            val workInfo = workInfos.firstOrNull()
+            if (workInfo != null) {
+                when (workInfo.state) {
+                    androidx.work.WorkInfo.State.RUNNING -> {
+                        syncStatusView.text = "Syncing..."
+                    }
+                    androidx.work.WorkInfo.State.SUCCEEDED -> {
+                        val lastSync = "Last synced: Just now"
+                        syncStatusView.text = lastSync
+                        val cloudSyncPrefs = getSharedPreferences(CloudSyncConstants.PREFS_NAME, Context.MODE_PRIVATE)
+                        val dbUri = mDatabase?.fileUri?.toString()
+                        if (dbUri != null) {
+                            cloudSyncPrefs.edit().putLong(CloudSyncConstants.PREF_LAST_SYNC_TIMESTAMP + "_$dbUri", System.currentTimeMillis()).apply()
+                        }
+                    }
+                    androidx.work.WorkInfo.State.FAILED -> {
+                        syncStatusView.text = "Sync failed"
+                    }
+                    else -> {
+                        val cloudSyncPrefs = getSharedPreferences(CloudSyncConstants.PREFS_NAME, Context.MODE_PRIVATE)
+                        val dbUri = mDatabase?.fileUri?.toString()
+                        if (dbUri != null) {
+                            val lastSyncTimestamp = cloudSyncPrefs.getLong(CloudSyncConstants.PREF_LAST_SYNC_TIMESTAMP + "_$dbUri", 0)
+                            if (lastSyncTimestamp > 0) {
+                                val lastSync = "Last synced: ${DateInstant(lastSyncTimestamp).toLocalDateTime()}"
+                                syncStatusView.text = lastSync
+                            } else {
+                                syncStatusView.text = "Not synced yet"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         mGroupEditViewModel.onGroupCreated.observe(this) { groupInfo ->
             if (groupInfo.title.isNotEmpty()) {
                 mMainGroup?.let { parentGroup ->
@@ -541,6 +584,30 @@ class GroupActivity : DatabaseLockActivity(),
                             onLaunchActivitySpecialMode()
                         }
                     )
+                }
+            }
+        }
+
+        mDatabaseViewModel.saveDatabase.observe(this) { save ->
+            if (save) {
+                val cloudSyncPrefs = getSharedPreferences(CloudSyncConstants.PREFS_NAME, Context.MODE_PRIVATE)
+                val dbUri = mDatabase?.fileUri?.toString()
+                if (dbUri != null) {
+                    val driveFileId = cloudSyncPrefs.getString("drive_file_id_$dbUri", null)
+                    val localFilePath = cloudSyncPrefs.getString("local_file_path_$dbUri", null)
+
+                    if (driveFileId != null && localFilePath != null) {
+                        val workData = Data.Builder()
+                            .putString(SyncWorker.KEY_DRIVE_FILE_ID, driveFileId)
+                            .putString(SyncWorker.KEY_LOCAL_FILE_PATH, localFilePath)
+                            .build()
+
+                        val syncRequest = OneTimeWorkRequestBuilder<SyncWorker>()
+                            .setInputData(workData)
+                            .build()
+
+                        WorkManager.getInstance(this).enqueue(syncRequest)
+                    }
                 }
             }
         }

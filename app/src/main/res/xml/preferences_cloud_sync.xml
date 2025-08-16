@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+    <PreferenceCategory android:title="@string/google_drive">
+        <Preference
+            android:key="@string/link_google_drive_key"
+            android:title="@string/link_google_drive_title"
+            android:summary="@string/link_google_drive_summary"
+            android:persistent="false" />
+    </PreferenceCategory>
+</PreferenceScreen>

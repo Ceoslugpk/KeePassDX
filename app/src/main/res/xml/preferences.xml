@@ -27,6 +27,12 @@
 			android:icon="@drawable/prefs_phone_android_24dp"
 			android:summary="@string/menu_app_settings_summary"
             android:persistent="false" />
+		<Preference
+			android:key="@string/settings_cloud_sync_key"
+			android:title="@string/menu_cloud_sync_settings"
+			android:icon="@drawable/ic_cloud_sync"
+			android:summary="@string/menu_cloud_sync_settings_summary"
+			android:persistent="false" />
         <Preference
             android:key="@string/settings_form_filling_key"
             android:title="@string/menu_form_filling_settings"

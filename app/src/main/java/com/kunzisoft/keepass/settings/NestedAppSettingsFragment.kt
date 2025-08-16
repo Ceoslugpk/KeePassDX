@@ -20,6 +20,7 @@
 package com.kunzisoft.keepass.settings
 
 import android.content.ActivityNotFoundException
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -30,12 +31,22 @@ import android.view.autofill.AutofillManager
 import android.widget.Toast
 import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AlertDialog
+import androidx.credentials.CredentialManager
+import androidx.credentials.GetCredentialRequest
+import androidx.credentials.exceptions.GetCredentialException
 import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.lifecycleScope
 import androidx.preference.ListPreference
 import androidx.preference.Preference
 import androidx.preference.TwoStatePreference
+import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.kunzisoft.keepass.BuildConfig
+import com.kunzisoft.keepass.settings.CloudSyncConstants.PREFS_NAME
+import com.kunzisoft.keepass.settings.CloudSyncConstants.PREF_IS_GOOGLE_DRIVE_LINKED
+import com.kunzisoft.keepass.settings.CloudSyncConstants.PREF_GOOGLE_DRIVE_DISPLAY_NAME
+import com.kunzisoft.keepass.settings.CloudSyncConstants.PREF_GOOGLE_DRIVE_EMAIL
 import com.kunzisoft.keepass.R
 import com.kunzisoft.keepass.activities.dialogs.ProFeatureDialogFragment
 import com.kunzisoft.keepass.activities.dialogs.UnavailableFeatureDialogFragment
@@ -52,11 +63,50 @@ import com.kunzisoft.keepass.utils.UriUtil.openUrl
 import com.kunzisoft.keepass.utils.UriUtil.releaseAllUnnecessaryPermissionUris
 
 
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInClient
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.api.Scope
+import com.google.api.services.drive.DriveScopes
+
 class NestedAppSettingsFragment : NestedSettingsFragment() {
 
+import androidx.activity.result.contract.ActivityResultContracts
+
     private var warningAlertDialog: AlertDialog? = null
+    private lateinit var googleSignInClient: GoogleSignInClient
+    private val signInLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+        try {
+            val account = task.getResult(com.google.android.gms.common.api.ApiException::class.java)
+            // Signed in successfully, show authenticated UI.
+            cloudSyncPrefs.edit()
+                .putBoolean(PREF_IS_GOOGLE_DRIVE_LINKED, true)
+                .putString(PREF_GOOGLE_DRIVE_DISPLAY_NAME, account.displayName)
+                .putString(PREF_GOOGLE_DRIVE_EMAIL, account.email)
+                .apply()
+            updateCloudSyncPreferenceUI()
+        } catch (e: com.google.android.gms.common.api.ApiException) {
+            // The ApiException status code indicates the detailed failure reason.
+            // Please refer to the GoogleSignInStatusCodes class reference for more information.
+            Log.w("CloudSync", "signInResult:failed code=" + e.statusCode)
+            Toast.makeText(context, "Sign-in failed", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private val cloudSyncPrefs by lazy {
+        requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    }
 
     override fun onCreateScreenPreference(screen: Screen, savedInstanceState: Bundle?, rootKey: String?) {
+
+        if (screen == Screen.CLOUD_SYNC) {
+            val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                .requestEmail()
+                .requestScopes(Scope(DriveScopes.DRIVE_FILE))
+                .build()
+            googleSignInClient = GoogleSignIn.getClient(requireActivity(), gso)
+        }
 
         // Load the preferences from an XML resource
         when (screen) {
@@ -72,7 +122,48 @@ class NestedAppSettingsFragment : NestedSettingsFragment() {
             Screen.APPEARANCE -> {
                 onCreateAppearancePreferences(rootKey)
             }
+            Screen.CLOUD_SYNC -> {
+                onCreateCloudSyncPreferences(rootKey)
+            }
             else -> {}
+        }
+    }
+
+    private fun onCreateCloudSyncPreferences(rootKey: String?) {
+        setPreferencesFromResource(R.xml.preferences_cloud_sync, rootKey)
+        updateCloudSyncPreferenceUI()
+    }
+
+    private fun updateCloudSyncPreferenceUI() {
+        val preference = findPreference<Preference>(getString(R.string.link_google_drive_key))
+        val isLinked = cloudSyncPrefs.getBoolean(PREF_IS_GOOGLE_DRIVE_LINKED, false)
+
+        if (isLinked) {
+            val displayName = cloudSyncPrefs.getString(PREF_GOOGLE_DRIVE_DISPLAY_NAME, "")
+            preference?.title = "Unlink Google Drive"
+            preference?.summary = "Signed in as $displayName"
+            preference?.setOnPreferenceClickListener {
+                AlertDialog.Builder(requireContext())
+                    .setTitle("Unlink Account")
+                    .setMessage("Are you sure you want to unlink your Google Drive account?")
+                    .setPositiveButton("Unlink") { _, _ ->
+                        googleSignInClient.signOut().addOnCompleteListener {
+                            cloudSyncPrefs.edit().clear().apply()
+                            updateCloudSyncPreferenceUI()
+                        }
+                    }
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .show()
+                true
+            }
+        } else {
+            preference?.title = "Link Google Drive"
+            preference?.summary = "Link your Google Drive account to sync your database"
+            preference?.setOnPreferenceClickListener {
+                val signInIntent = googleSignInClient.signInIntent
+                signInLauncher.launch(signInIntent)
+                true
+            }
         }
     }
 
@@ -528,6 +619,9 @@ class NestedAppSettingsFragment : NestedSettingsFragment() {
 
     override fun onResume() {
         super.onResume()
+        if (getScreen() == Screen.CLOUD_SYNC) {
+            updateCloudSyncPreferenceUI()
+        }
         activity?.let { activity ->
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 findPreference<TwoStatePreference?>(getString(R.string.settings_autofill_enable_key))?.let { autoFillEnablePreference ->

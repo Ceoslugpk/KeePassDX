@@ -58,6 +58,14 @@
                     android:ellipsize="end"
                     tools:text="Database"
                     style="@style/KeepassDXStyle.Title.OnSurface" />
+                <TextView
+                    android:id="@+id/sync_status"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:layout_marginLeft="8dp"
+                    android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
+                    tools:text="Syncing..." />
             </com.google.android.material.appbar.MaterialToolbar>
 
             <FrameLayout

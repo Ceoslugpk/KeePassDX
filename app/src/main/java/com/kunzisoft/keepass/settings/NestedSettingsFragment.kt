@@ -30,7 +30,7 @@ import com.kunzisoft.keepass.activities.dialogs.UnderDevelopmentFeatureDialogFra
 abstract class NestedSettingsFragment : PreferenceFragmentCompat() {
 
     enum class Screen {
-        APPLICATION, FORM_FILLING, ADVANCED_UNLOCK, APPEARANCE, DATABASE, DATABASE_SECURITY, DATABASE_MASTER_KEY
+        APPLICATION, FORM_FILLING, ADVANCED_UNLOCK, APPEARANCE, DATABASE, DATABASE_SECURITY, DATABASE_MASTER_KEY, CLOUD_SYNC
     }
 
     fun getScreen(): Screen {
@@ -67,6 +67,7 @@ abstract class NestedSettingsFragment : PreferenceFragmentCompat() {
                 Screen.APPLICATION,
                 Screen.FORM_FILLING,
                 Screen.ADVANCED_UNLOCK,
+                Screen.CLOUD_SYNC,
                 Screen.APPEARANCE -> NestedAppSettingsFragment()
                 Screen.DATABASE,
                 Screen.DATABASE_SECURITY,
@@ -88,6 +89,7 @@ abstract class NestedSettingsFragment : PreferenceFragmentCompat() {
                 Screen.DATABASE -> resources.getString(R.string.menu_database_settings)
                 Screen.DATABASE_SECURITY -> resources.getString(R.string.menu_security_settings)
                 Screen.DATABASE_MASTER_KEY -> resources.getString(R.string.menu_master_key_settings)
+                Screen.CLOUD_SYNC -> resources.getString(R.string.menu_cloud_sync_settings)
             }
         }
     }

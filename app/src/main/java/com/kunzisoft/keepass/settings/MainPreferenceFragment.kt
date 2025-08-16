@@ -91,6 +91,13 @@ class MainPreferenceFragment : PreferenceFragmentCompat() {
             }
         }
 
+        findPreference<Preference>(getString(R.string.settings_cloud_sync_key))?.apply {
+            onPreferenceClickListener = Preference.OnPreferenceClickListener {
+                mCallback?.onNestedPreferenceSelected(NestedSettingsFragment.Screen.CLOUD_SYNC)
+                false
+            }
+        }
+
         findPreference<Preference>(getString(R.string.settings_appearance_key))?.apply {
             onPreferenceClickListener = Preference.OnPreferenceClickListener {
                 mCallback?.onNestedPreferenceSelected(NestedSettingsFragment.Screen.APPEARANCE)

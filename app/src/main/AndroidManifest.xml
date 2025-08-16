@@ -166,6 +166,8 @@
         <activity
             android:name="com.kunzisoft.keepass.settings.AdvancedUnlockSettingsActivity" />
         <activity
+            android:name="com.kunzisoft.keepass.settings.CloudSyncSettingsActivity" />
+        <activity
             android:name="com.kunzisoft.keepass.settings.AutofillSettingsActivity" />
         <activity
             android:name="com.kunzisoft.keepass.settings.AppearanceSettingsActivity" />

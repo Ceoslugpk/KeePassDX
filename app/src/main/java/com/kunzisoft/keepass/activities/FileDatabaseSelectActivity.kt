@@ -38,9 +38,20 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import androidx.coordinatorlayout.widget.CoordinatorLayout
 import androidx.core.view.isVisible
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.SimpleItemAnimator
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import com.google.android.gms.common.api.Scope
+import com.google.api.client.extensions.android.http.AndroidHttp
+import com.google.api.client.googleapis.extensions.android.gms.auth.GoogleAccountCredential
+import com.google.api.client.json.gson.GsonFactory
+import com.google.api.services.drive.Drive
+import com.google.api.services.drive.DriveScopes
 import com.google.android.material.snackbar.Snackbar
 import com.kunzisoft.keepass.R
 import com.kunzisoft.keepass.activities.dialogs.SetMainCredentialDialogFragment
@@ -77,14 +88,18 @@ import com.kunzisoft.keepass.view.showActionErrorIfNeeded
 import com.kunzisoft.keepass.viewmodels.DatabaseFilesViewModel
 import java.io.FileNotFoundException
 
+import com.kunzisoft.keepass.activities.dialogs.DriveFilePickerFragment
+
 class FileDatabaseSelectActivity : DatabaseModeActivity(),
-        SetMainCredentialDialogFragment.AssignMainCredentialDialogListener {
+        SetMainCredentialDialogFragment.AssignMainCredentialDialogListener,
+        DriveFilePickerFragment.DriveFilePickerListener {
 
     // Views
     private lateinit var coordinatorLayout: CoordinatorLayout
     private var specialTitle: View? = null
     private var createDatabaseButtonView: View? = null
     private var openDatabaseButtonView: View? = null
+    private var openFromCloudButtonView: View? = null
 
     private val databaseFilesViewModel: DatabaseFilesViewModel by viewModels()
 
@@ -149,6 +164,44 @@ class FileDatabaseSelectActivity : DatabaseModeActivity(),
         }
         openDatabaseButtonView = findViewById(R.id.open_database_button)
         openDatabaseButtonView?.setOpenDocumentClickListener(mExternalFileHelper)
+
+        openFromCloudButtonView = findViewById(R.id.open_from_cloud_button)
+        openFromCloudButtonView?.setOnClickListener {
+            val cloudSyncPrefs = getSharedPreferences(com.kunzisoft.keepass.settings.CloudSyncConstants.PREFS_NAME, Context.MODE_PRIVATE)
+            val isLinked = cloudSyncPrefs.getBoolean(com.kunzisoft.keepass.settings.CloudSyncConstants.PREF_IS_GOOGLE_DRIVE_LINKED, false)
+            if (isLinked) {
+                val account = GoogleSignIn.getLastSignedInAccount(this)
+                if (account == null) {
+                    // This should not happen if isLinked is true, but handle it just in case
+                    Snackbar.make(coordinatorLayout, "Not signed in. Please link your account again.", Snackbar.LENGTH_LONG)
+                        .setAction("Settings") {
+                            startActivity(Intent(this, com.kunzisoft.keepass.settings.SettingsActivity::class.java))
+                        }
+                        .show()
+                    return@setOnClickListener
+                }
+
+                val credential = GoogleAccountCredential.usingOAuth2(
+                    this,
+                    setOf(DriveScopes.DRIVE_FILE)
+                )
+                credential.selectedAccount = account.account
+                val drive = Drive.Builder(
+                    AndroidHttp.newCompatibleTransport(),
+                    GsonFactory(),
+                    credential
+                ).setApplicationName(getString(R.string.app_name)).build()
+
+                listDriveFiles(drive)
+
+            } else {
+                Snackbar.make(coordinatorLayout, "Please link your Google Drive account in settings", Snackbar.LENGTH_LONG)
+                    .setAction("Settings") {
+                        startActivity(Intent(this, com.kunzisoft.keepass.settings.SettingsActivity::class.java))
+                    }
+                    .show()
+            }
+        }
 
         // History list
         val fileDatabaseHistoryRecyclerView = findViewById<RecyclerView>(R.id.file_list)
@@ -223,6 +276,74 @@ class FileDatabaseSelectActivity : DatabaseModeActivity(),
         databaseFilesViewModel.defaultDatabase.observe(this) {
             // Retrieve settings for default database
             mAdapterDatabaseHistory?.setDefaultDatabase(it)
+        }
+    }
+
+    private fun listDriveFiles(drive: Drive) {
+        lifecycleScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    drive.files().list()
+                        .setQ("mimeType != 'application/vnd.google-apps.folder' and trashed = false and name contains '.kdbx'")
+                        .setSpaces("drive")
+                        .setFields("nextPageToken, files(id, name)")
+                        .execute()
+                }
+                val files = result.files
+                if (files.isNullOrEmpty()) {
+                    Snackbar.make(coordinatorLayout, "No .kdbx files found in your Google Drive", Snackbar.LENGTH_LONG).show()
+                } else {
+                    val fileNames = files.map { it.name }.toTypedArray()
+                    val fileIds = files.map { it.id }.toTypedArray()
+                    DriveFilePickerFragment.newInstance(fileNames, fileIds)
+                        .show(supportFragmentManager, "driveFilePicker")
+                }
+            } catch (e: Exception) {
+                Log.e("CloudSync", "Error listing files", e)
+                Snackbar.make(coordinatorLayout, "Error listing files from Google Drive", Snackbar.LENGTH_LONG).asError().show()
+            }
+        }
+    }
+
+    override fun onFileSelected(fileId: String, fileName: String) {
+        lifecycleScope.launch {
+            try {
+                val account = GoogleSignIn.getLastSignedInAccount(this@FileDatabaseSelectActivity)
+                if (account == null) {
+                    // This should not happen, but handle it
+                    return@launch
+                }
+                val credential = GoogleAccountCredential.usingOAuth2(
+                    this@FileDatabaseSelectActivity,
+                    setOf(DriveScopes.DRIVE_FILE)
+                )
+                credential.selectedAccount = account.account
+                val drive = Drive.Builder(
+                    AndroidHttp.newCompatibleTransport(),
+                    GsonFactory(),
+                    credential
+                ).setApplicationName(getString(R.string.app_name)).build()
+
+                val outputStream = java.io.FileOutputStream(java.io.File(cacheDir, fileName))
+                withContext(Dispatchers.IO) {
+                    drive.files().get(fileId).executeMediaAndDownloadTo(outputStream)
+                }
+                val file = java.io.File(cacheDir, fileName)
+                val uri = Uri.fromFile(file)
+
+                // Save the Drive ID and local path for the sync worker
+                val cloudSyncPrefs = getSharedPreferences(com.kunzisoft.keepass.settings.CloudSyncConstants.PREFS_NAME, Context.MODE_PRIVATE)
+                cloudSyncPrefs.edit()
+                    .putString("drive_file_id_${uri.toString()}", fileId)
+                    .putString("local_file_path_${uri.toString()}", file.absolutePath)
+                    .apply()
+
+                launchPasswordActivityWithPath(uri)
+
+            } catch (e: Exception) {
+                Log.e("CloudSync", "Error downloading file", e)
+                Snackbar.make(coordinatorLayout, "Error downloading file", Snackbar.LENGTH_LONG).asError().show()
+            }
         }
     }
 

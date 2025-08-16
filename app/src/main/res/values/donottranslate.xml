@@ -268,6 +268,11 @@
     <string name="settings_database_security_key" translatable="false">settings_database_security_key</string>
     <string name="settings_database_credentials_key" translatable="false">settings_database_credentials_key</string>
 
+    <!-- Cloud Sync Settings -->
+    <string name="settings_cloud_sync_key" translatable="false">settings_cloud_sync_key</string>
+    <string name="link_google_drive_key" translatable="false">link_google_drive_key</string>
+    <string name="google_drive" translatable="false">Google Drive</string>
+
     <string name="database_category_general_key" translatable="false">database_category_general_key</string>
     <string name="database_name_key" translatable="false">database_name_key</string>
     <string name="database_description_key" translatable="false">database_description_key</string>
