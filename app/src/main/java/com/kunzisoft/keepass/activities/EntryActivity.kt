@@ -84,8 +84,18 @@ import com.kunzisoft.keepass.view.setTransparentNavigationBar
 import com.kunzisoft.keepass.view.showActionErrorIfNeeded
 import com.kunzisoft.keepass.viewmodels.EntryViewModel
 import java.util.UUID
+import com.kunzisoft.keepass.activities.dialogs.ShareEntryDialogFragment
+import com.kunzisoft.keepass.database.element.database.DatabaseKDBX
+import com.kunzisoft.keepass.database.element.group.GroupKDBX
+import com.kunzisoft.keepass.database.element.entry.EntryKDBX
+import android.content.Context
+import androidx.core.content.FileProvider
+import com.kunzisoft.keepass.database.element.MainCredential
+import com.kunzisoft.keepass.database.file.output.DatabaseOutputKDBX
+import java.io.File
+import java.io.FileOutputStream
 
-class EntryActivity : DatabaseLockActivity() {
+class EntryActivity : DatabaseLockActivity(), ShareEntryDialogFragment.ShareEntryListener {
 
     private var footer: ViewGroup? = null
     private var coordinatorLayout: CoordinatorLayout? = null
@@ -120,6 +130,7 @@ class EntryActivity : DatabaseLockActivity() {
     }
 
     private var mIcon: IconImage? = null
+    private var tempShareFile: File? = null
     private var mColorSecondary: Int = 0
     private var mColorSurface: Int = 0
     private var mColorOnSurface: Int = 0
@@ -470,8 +481,56 @@ class EntryActivity : DatabaseLockActivity() {
         }
     }
 
+    override fun onPasswordSet(password: String) {
+        mEntryViewModel.entryInfoHistory.value?.entryInfo?.let { entryInfo ->
+            try {
+                val newDatabase = DatabaseKDBX()
+                val rootGroup = GroupKDBX()
+                rootGroup.title = "Shared Entry"
+                newDatabase.rootGroup = rootGroup
+
+                val newEntry = EntryKDBX()
+                newEntry.setEntryInfo(newDatabase, entryInfo)
+                rootGroup.addEntry(newEntry)
+
+                val mainCredential = MainCredential()
+                mainCredential.password = password
+
+                tempShareFile = File(cacheDir, "shared_entry.kdbx")
+                val fileOutputStream = FileOutputStream(tempShareFile)
+
+                val databaseOutput = DatabaseOutputKDBX(newDatabase)
+                databaseOutput.writeDatabase(fileOutputStream) {
+                    newDatabase.masterKey = mainCredential
+                }
+
+                val uri = FileProvider.getUriForFile(this, "${applicationContext.packageName}.provider", tempShareFile!!)
+                val shareIntent: Intent = Intent().apply {
+                    action = Intent.ACTION_SEND
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    type = "application/octet-stream"
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                startActivity(Intent.createChooser(shareIntent, "Share entry"))
+
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                val clip = android.content.ClipData.newPlainText("password", password)
+                clipboard.setPrimaryClip(clip)
+                Toast.makeText(this, "Password copied to clipboard. Share it securely.", Toast.LENGTH_LONG).show()
+
+            } catch (e: Exception) {
+                Log.e(TAG, "Error exporting entry", e)
+                Toast.makeText(this, "Error exporting entry", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
+            R.id.menu_share -> {
+                ShareEntryDialogFragment().show(supportFragmentManager, "ShareEntryDialog")
+                return true
+            }
             R.id.menu_edit -> {
                 mDatabase?.let { database ->
                     mMainEntryId?.let { entryId ->
@@ -511,6 +570,11 @@ class EntryActivity : DatabaseLockActivity() {
             android.R.id.home -> finish() // close this activity and return to preview activity (if there is any)
         }
         return super.onOptionsItemSelected(item)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        tempShareFile?.delete()
     }
 
     override fun finish() {

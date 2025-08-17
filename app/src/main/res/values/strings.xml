@@ -275,6 +275,7 @@
     <string name="master_key_settings_summary">Change, renewal</string>
     <string name="menu_donate">Donate</string>
     <string name="menu_edit">Edit</string>
+    <string name="menu_share">Share</string>
     <string name="menu_copy">Copy</string>
     <string name="menu_move">Move</string>
     <string name="menu_paste">Paste</string>
